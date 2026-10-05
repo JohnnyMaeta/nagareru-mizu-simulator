@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>流れる水のはたらきシミュレーター</title>
+<meta name="description" content="5年理科「流れる水のはたらき」。かたむきと水の量を変えて地面がけずれるようすを調べる流水実験と、容器に入れた石（スポンジ）をふって角がとれて丸くなる実験をシミュレーションします。">
+<style>
+  :root{
+    --bg:#f4f7fb; --panel:#ffffff; --ink:#1f2a37; --muted:#5b6b7c; --line:#d6dee8;
+    --accent:#1f6fd0; --accent2:#e86f24; --ok:#1f8f5f; --ng:#c43d3d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif;line-height:1.6;-webkit-text-size-adjust:100%}
+  header{background:#14532d;color:#fff;padding:14px 16px 0}
+  header h1{margin:0;font-size:1.35rem;letter-spacing:.02em}
+  header .sub{margin:4px 0 10px;font-size:.9rem;opacity:.92}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap}
+  .tabs button{appearance:none;border:0;background:#2e7d4f;color:#fff;font-size:.95rem;padding:9px 14px;border-radius:10px 10px 0 0;cursor:pointer;font-weight:600}
+  .tabs button.active{background:var(--bg);color:var(--ink)}
+  main{padding:14px 16px 40px;max-width:1180px;margin:0 auto}
+  .tab{display:none}.tab.active{display:block}
+  .panel{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+  @media (max-width:820px){.panel{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .card h2{font-size:1.05rem;margin:0 0 8px;color:#14532d}
+  .card h3{font-size:.95rem;margin:12px 0 6px;color:#14532d}
+  .canvas-wrap{position:relative;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  canvas{display:block;width:100%;height:auto;touch-action:manipulation}
+  .row{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0;align-items:center}
+  .btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;font-size:1rem;font-weight:700;cursor:pointer;background:var(--accent);color:#fff}
+  .btn.secondary{background:#e9eef5;color:var(--ink)}
+  .btn.warn{background:var(--accent2)}
+  .btn.ok{background:var(--ok)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{appearance:none;border:0;background:#fff;padding:7px 12px;font-size:.9rem;cursor:pointer;color:var(--ink)}
+  .seg button.on{background:var(--accent);color:#fff}
+  .cond{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;font-size:.92rem;margin:4px 0 8px}
+  .cond .name{font-weight:700}
+  .status{margin-top:8px;padding:10px 12px;border-radius:10px;background:#eef4fc;border-left:4px solid var(--accent);font-size:.95rem;min-height:2.6em}
+  .result{margin-top:10px;padding:10px 12px;border-radius:10px;background:#fff8ec;border-left:4px solid var(--accent2);font-size:.92rem}
+  .result table{width:100%;border-collapse:collapse;font-size:.88rem}
+  .result th,.result td{border:1px solid #f0d9b5;padding:4px 6px;text-align:left;vertical-align:top}
+  .result th{background:#fdf0dc}
+  .note{color:var(--muted);font-size:.85rem}
+  .wakatta{margin-top:10px;padding:12px;border-radius:10px;background:#e8f6ef;border:2px solid var(--ok)}
+  .wakatta h3{margin:0 0 6px;color:var(--ok)}
+  .wakatta p{margin:4px 0}
+  .words{margin-top:10px;padding:10px 12px;border-radius:10px;background:#eef4fc;font-size:.92rem}
+  .words b{color:#1f6fd0}
+  table.plain{border-collapse:collapse;width:100%;font-size:.95rem}
+  table.plain th,table.plain td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+  table.plain th{background:#eef2f7}
+  .quiz .q{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:10px 0;background:#fff}
+  .quiz .q p{margin:0 0 6px;font-weight:700}
+  .quiz .opts{display:flex;flex-direction:column;gap:6px}
+  .quiz .opts button{appearance:none;text-align:left;border:1px solid var(--line);background:#f8fafc;border-radius:8px;padding:8px 10px;font-size:.95rem;cursor:pointer}
+  .quiz .opts button.ok{background:#e8f6ef;border-color:var(--ok);font-weight:700}
+  .quiz .opts button.ng{background:#fdecec;border-color:var(--ng)}
+  .quiz .fb{margin-top:6px;font-size:.9rem;min-height:1.4em}
+  .meter{display:grid;grid-template-columns:7em 1fr;gap:4px 8px;align-items:center;font-size:.88rem}
+  .meter .bar{height:10px;background:#e4eaf2;border-radius:5px;overflow:hidden}
+  .meter .bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .two h4{margin:4px 0;font-size:.9rem;color:#14532d}
+</style>
+</head>
+<body>
+<header>
+  <h1>流れる水のはたらきシミュレーター</h1>
+  <p class="sub">5年 理科「流れる水のはたらき」　問題：流れる水には、どのようなはたらきがあるのだろうか。</p>
+  <nav class="tabs" role="tablist">
+    <button data-tab="flow" class="active">① 流水実験：かたむき・水の量</button>
+    <button data-tab="sponge">② 川原の石：容器に入れてふる</button>
+    <button data-tab="summary">③ まとめ・たしかめ</button>
+  </nav>
+</header>
+
+<main>
+<!-- ① 流水実験 -->
+<section id="tab-flow" class="tab active">
+  <div class="panel">
+    <div>
+      <div class="canvas-wrap"><canvas id="flowCanvas" aria-label="流水実験そう置の画面"></canvas></div>
+      <p class="note">流水実験そう置（水でしめらせた土・すべり止めマット・受け皿）を上から見た図です。せんじょうびんで水を流すと、みぞがけずられ、運ばれた土が受け皿に積もります。2つのそう置で「かたむき」か「水の量」の条件を1つだけ変えてくらべます。</p>
+    </div>
+    <aside class="card">
+      <h2>実験の条件を決める</h2>
+      <div class="row">
+        <button class="btn secondary" id="fPreset2">かたむきをくらべる</button>
+        <button class="btn secondary" id="fPreset3">水の量をくらべる</button>
+      </div>
+      <div class="cond">
+        <span class="name">Ⓐ かたむき</span><div class="seg" id="fSlopeA"><button data-v="5" class="on">低い台（5cm）</button><button data-v="10">高い台（10cm）</button></div>
+        <span class="name">Ⓐ 水の量</span><div class="seg" id="fWaterA"><button data-v="1" class="on">せんじょうびん1つ</button><button data-v="2">2つ</button></div>
+        <span class="name">Ⓑ かたむき</span><div class="seg" id="fSlopeB"><button data-v="5">低い台（5cm）</button><button data-v="10" class="on">高い台（10cm）</button></div>
+        <span class="name">Ⓑ 水の量</span><div class="seg" id="fWaterB"><button data-v="1" class="on">せんじょうびん1つ</button><button data-v="2">2つ</button></div>
+      </div>
+      <div class="row">
+        <button class="btn" id="fRun">水を流す</button>
+        <button class="btn secondary" id="fReset">やり直す</button>
+        <div class="seg" id="fSpeed"><button data-v="1" class="on">ふつう</button><button data-v="3">早送り</button></div>
+      </div>
+      <div class="status" id="fStatus">条件を決めて「水を流す」を押しましょう。変える条件は1つだけにします。</div>
+      <div class="two" style="margin-top:8px">
+        <div><h4>Ⓐ</h4><div class="meter" id="fMeterA"></div></div>
+        <div><h4>Ⓑ</h4><div class="meter" id="fMeterB"></div></div>
+      </div>
+      <div class="result" id="fResult" hidden></div>
+      <div class="wakatta" id="fWakatta" hidden>
+        <h3>わかったこと</h3>
+        <p>● 流れる水には、地面をけずったり、けずった土や石を運んだりするはたらきがある。</p>
+        <p>● 土地のかたむきが大きかったり、水の量が多かったりすると、流れの速さは速くなり、流れる水のはたらきも大きくなる。</p>
+        <p>● 流れのゆるやかなところには、土や石が積もる。</p>
+      </div>
+      <div class="words" id="fWords" hidden>
+        水が地面をけずるはたらきを、<b>しん食</b>という。<br>けずった土を運ぶはたらきを、<b>運ぱん</b>という。<br>運んできた土を積もらせるはたらきを、<b>たい積</b>という。
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ② スポンジ実験 -->
+<section id="tab-sponge" class="tab">
+  <div class="panel">
+    <div>
+      <div class="canvas-wrap"><canvas id="spongeCanvas" aria-label="スポンジをふる実験の画面"></canvas></div>
+      <p class="note">固い石のかわりに、生け花用スポンジ（1辺2cm〜3cmの立方体）を使います。容器にスポンジと水を入れ、ふたをしてふります。50回ふったら1つ取り出し、さらに50回（合計100回）、さらに50回（合計150回）ふって、1つずつ取り出して大きさや形をくらべます。</p>
+    </div>
+    <aside class="card">
+      <h2>容器をふって、スポンジのようすを調べる</h2>
+      <div class="row">
+        <button class="btn" id="sShake10">10回ふる</button>
+        <button class="btn" id="sShake50">50回ふる</button>
+        <button class="btn ok" id="sTake" disabled>1つ取り出す</button>
+        <button class="btn secondary" id="sReset">やり直す</button>
+      </div>
+      <div class="status" id="sStatus">まず「もとの大きさ」のスポンジを1つとっておきました。容器をふってみましょう。</div>
+      <div class="result" id="sResult" hidden></div>
+      <div class="wakatta" id="sWakatta" hidden>
+        <h3>わかったこと</h3>
+        <p>流れる水には、石をより小さくし、角をけずり丸みをおびた形に変えるはたらきがある、と考えることができる。</p>
+      </div>
+      <div class="words" id="sWords" hidden>
+        川の水は、川岸を<b>しん食</b>したり、土や石を<b>運ぱん</b>したりしている。<br>石は、川が増水したときなどに運ばれながらぶつかり合って、角がけずれ、小さく丸くなっていき、川原などに<b>たい積</b>する。
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ③ まとめ -->
+<section id="tab-summary" class="tab">
+  <div class="panel">
+    <div class="card">
+      <h2>わかったこと</h2>
+      <p>● 流れる水には、地面をけずったり、けずった土や石を運んだりするはたらきがある。</p>
+      <p>● 土地のかたむきが大きかったり、水の量が多かったりすると、流れの速さは速くなり、流れる水のはたらきも大きくなる。</p>
+      <p>● 流れのゆるやかなところには、土や石が積もる。</p>
+      <p>● 流れる水には、石をより小さくし、角をけずり丸みをおびた形に変えるはたらきがある、と考えることができる。</p>
+      <h3>流れる水の3つのはたらき</h3>
+      <table class="plain">
+        <tr><th>はたらき</th><th>どんなはたらきか</th><th>大きくなるとき</th></tr>
+        <tr><td>しん食</td><td>水が地面をけずる</td><td rowspan="2">土地のかたむきが大きいとき・水の量が多いとき（流れが速いとき）</td></tr>
+        <tr><td>運ぱん</td><td>けずった土を運ぶ</td></tr>
+        <tr><td>たい積</td><td>運んできた土を積もらせる</td><td>流れがゆるやかなところ</td></tr>
+      </table>
+      <h3>実験の結果（かたむきと水の量で整理）</h3>
+      <table class="plain">
+        <tr><th>地面のかたむきが急なところ</th><th>地面のかたむきがゆるやかなところ</th></tr>
+        <tr><td>○水の流れは速い。<br>○土は深くけずられる。</td><td>○水の流れはゆるやか。<br>○土はあまりけずられない。<br>○水によって運ばれてきた土が積もる。</td></tr>
+        <tr><th>水の量が少ないとき</th><th>水の量が多いとき</th></tr>
+        <tr><td>○水の流れはゆるやか。<br>○水は、すんでいる。</td><td>○水の流れは速い。<br>○水は、にごっている。<br>○土は、よりけずられる。</td></tr>
+      </table>
+      <h3>川原の石</h3>
+      <p>川の上流の石は大きく角ばっていて、下流にいくにつれて小さく丸くなる。石は、川が増水したときなどに運ばれながらぶつかり合って、角がけずれ、小さく丸くなっていき、川原などにたい積する。</p>
+    </div>
+    <div class="card quiz" id="quiz">
+      <h2>たしかめ問題</h2>
+      <p class="note">答えを選ぶと、すぐに正しいかどうかが分かります。</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<script>
+(() => {
+'use strict';
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rand=(a,b)=>a+Math.random()*(b-a);
+function mulberry(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+function fitCanvas(canvas,W,H){
+  const dpr=window.devicePixelRatio||1;const cw=canvas.clientWidth||W;
+  const w=Math.round(cw*dpr),h=Math.round(cw*H/W*dpr);
+  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
+  const ctx=canvas.getContext('2d');ctx.setTransform(w/W,0,0,w/W,0,0);return ctx;
+}
+function segControl(el,onChange){
+  el.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+    el.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');onChange&&onChange(parseFloat(b.dataset.v));
+  }));
+}
+const segValue=el=>parseFloat(el.querySelector('button.on').dataset.v);
+const segSet=(el,v)=>el.querySelectorAll('button').forEach(b=>b.classList.toggle('on',parseFloat(b.dataset.v)===v));
+/* 石（スポンジ）を角ばった形〜丸い形で描く。round=0 角ばる、1 丸い */
+function drawStone(ctx,x,y,size,round,seed,rot){
+  const rnd=mulberry(seed);const n=8;const pts=[];
+  for(let i=0;i<n;i++){
+    const a=rot+i/n*Math.PI*2;
+    const sq=1/Math.max(Math.abs(Math.cos(a)),Math.abs(Math.sin(a)));  // 正方形の半径
+    const rr=size/2*((1-round)*sq*(0.92+0.16*rnd())+round*(1+0.08*(rnd()-0.5)));
+    pts.push([x+Math.cos(a)*rr,y+Math.sin(a)*rr]);
+  }
+  ctx.beginPath();
+  if(round<0.15){pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();return;}
+  // 角を丸める（中点をつないで曲線）
+  for(let i=0;i<n;i++){const p=pts[i],q=pts[(i+1)%n];const mx=(p[0]+q[0])/2,my=(p[1]+q[1])/2;if(i===0)ctx.moveTo(mx,my);else ctx.quadraticCurveTo(p[0],p[1],mx,my);}
+  const p=pts[0],q=pts[1];ctx.quadraticCurveTo(p[0],p[1],(p[0]+q[0])/2,(p[1]+q[1])/2);ctx.closePath();
+}
+
+/* ---------- ① 流水実験 ---------- */
+const Flow=(()=>{
+  const W=900,H=540;
+  const canvas=document.getElementById('flowCanvas');
+  const TOP=40,SOIL_END=400,TRAY_END=500,TW=200;
+  const troughs=[{x:120,name:'Ⓐ'},{x:560,name:'Ⓑ'}];
+  const STEP=4,N=Math.floor((SOIL_END-TOP)/STEP)+1;
+  let speed=1,running=false,done=false;
+  const st=document.getElementById('fStatus'),res=document.getElementById('fResult'),wak=document.getElementById('fWakatta'),words=document.getElementById('fWords');
+  const runBtn=document.getElementById('fRun');
+  // 土のテクスチャ
+  const tex=document.createElement('canvas');tex.width=64;tex.height=64;{const c=tex.getContext('2d');c.fillStyle='#8b6a46';c.fillRect(0,0,64,64);const r=mulberry(3);for(let i=0;i<260;i++){c.fillStyle=`rgba(${60+r()*60|0},${40+r()*40|0},${20+r()*30|0},${.25+r()*.35})`;c.fillRect(r()*64,r()*64,1.5+r()*2,1.5+r()*2);}}
+  let pattern=null;
+
+  function makeTrough(t){
+    t.nodes=[];
+    for(let i=0;i<N;i++){const y=TOP+i*STEP;const ph=(y-TOP)/(SOIL_END-TOP);const cx=t.x+TW/2+30*Math.sin(ph*Math.PI*2);t.nodes.push({y,cx,cx0:cx,w:5,d:.12,depL:0,depR:0,wet:0});}
+    t.parts=[];t.pourLeft=0;t.delta=0;t.loadSum=0;t.loadN=0;t.maxD=0;t.vAvg=0;t.vN=0;
+  }
+  function reset(){
+    troughs.forEach(makeTrough);running=false;done=false;runBtn.disabled=false;
+    st.textContent='条件を決めて「水を流す」を押しましょう。変える条件は1つだけにします。';
+    res.hidden=true;wak.hidden=true;words.hidden=true;updateMeters();
+  }
+  function cond(){
+    return {A:{slope:segValue(document.getElementById('fSlopeA')),water:segValue(document.getElementById('fWaterA'))},
+            B:{slope:segValue(document.getElementById('fSlopeB')),water:segValue(document.getElementById('fWaterB'))}};
+  }
+  function run(){
+    if(running)return;
+    const c=cond();
+    troughs.forEach(makeTrough);
+    troughs[0].c=c.A;troughs[1].c=c.B;
+    troughs.forEach(t=>{t.pourLeft=260;});
+    running=true;done=false;runBtn.disabled=true;res.hidden=true;
+    const same=c.A.slope===c.B.slope&&c.A.water===c.B.water;
+    const both=c.A.slope!==c.B.slope&&c.A.water!==c.B.water;
+    st.textContent=same?'ⒶとⒷが同じ条件です。流しながら、変える条件を1つ決めてみましょう。':both?'かたむきと水の量の両方がちがいます。どちらが原因か分からなくなるので、ふつうは1つだけ変えます。':'水を流しています。流れの速さ・けずれ方・水の色・受け皿に積もる土を見くらべましょう。';
+  }
+  function curvature(t,i){ // 外側の向きと強さ（-1〜1、+なら右が外側）
+    const n=t.nodes;const a=n[Math.max(0,i-2)].cx0,b=n[i].cx0,c=n[Math.min(N-1,i+2)].cx0;
+    return clamp(-(a-2*b+c)/0.4,-1,1);
+  }
+  function curvatureSign(t,i){const k=curvature(t,i);return k>0.15?1:k<-0.15?-1:0;}
+  function step(){
+    if(!running)return;
+    for(let k=0;k<speed;k++){
+      for(const t of troughs){
+        const c=t.c;const v0=(c.slope===10?2.1:1.15)*(1+.3*(c.water-1));
+        if(t.pourLeft>0){
+          t.pourLeft--;
+          const n=c.water*0.9;
+          for(let j=0;j<n+(Math.random()<n-Math.floor(n)?1:0);j++){
+            t.parts.push({y:TOP+2,u:rand(-1,1),v:v0*rand(.85,1.15),load:0,inTray:false,x:0});
+          }
+        }
+        for(let i=t.parts.length-1;i>=0;i--){
+          const p=t.parts[i];
+          if(p.y<SOIL_END){
+            const idx=clamp(Math.round((p.y-TOP)/STEP),0,N-1);const nd=t.nodes[idx];
+            const k=curvature(t,idx);const ak=Math.abs(k);
+            const onOuter=ak>0.05&&Math.sign(p.u)===Math.sign(k);
+            const e=0.00004*p.v*p.v*(onOuter?1+0.8*ak:1-0.45*ak);
+            nd.d+=e*5;nd.w+=e*12;if(onOuter)nd.cx+=e*40*k;nd.wet=1;
+            p.load+=e;
+            if(!onOuter&&ak>0.05&&p.load>0.001){const q=p.load*0.02*ak;if(k>0)nd.depL+=q;else nd.depR+=q;p.load-=q;}
+            t.loadSum+=p.load;t.loadN++;t.vAvg+=p.v;t.vN++;
+            p.u=clamp(p.u+rand(-.15,.15),-1,1);
+            p.y+=p.v;
+            p.x=nd.cx+p.u*nd.w;
+            if(nd.d>t.maxD)t.maxD=nd.d;
+          }else{
+            // 受け皿：流れがゆるやかになり、土が積もる
+            p.inTray=true;p.v*=0.93;p.y+=p.v;p.x+=rand(-.6,.6)+(p.x<t.x+TW/2?-.3:.3);
+            const q=p.load*0.1;t.delta+=q;p.load-=q;
+            if(p.v<0.08||p.y>TRAY_END-8){t.delta+=p.load;t.parts.splice(i,1);}
+          }
+        }
+      }
+      for(const t of troughs){const n=t.nodes;for(let i=1;i<N-1;i++){const a=n[i-1],b=n[i],c=n[i+1];b.cx+=0.12*((a.cx+c.cx)/2-b.cx);b.w+=0.12*((a.w+c.w)/2-b.w);b.d+=0.12*((a.d+c.d)/2-b.d);b.depL+=0.12*((a.depL+c.depL)/2-b.depL);b.depR+=0.12*((a.depR+c.depR)/2-b.depR);}}
+      if(troughs.every(t=>t.pourLeft===0&&t.parts.length===0)){running=false;done=true;finish();break;}
+    }
+    updateMeters();
+  }
+  function wordsFor(t){
+    const c=t.c;const fast=c.slope===10||c.water===2;
+    const speedW=fast?'速い':'ゆるやか';
+    const eroW=(c.slope===10&&c.water===2)?'もっとも深くけずられる':c.slope===10?'深くけずられる':c.water===2?'よりけずられる':'あまりけずられない';
+    const turbW=c.water===2?'にごっている':c.slope===10?'少しにごる':'すんでいる';
+    return {speedW,eroW,turbW};
+  }
+  function finish(){
+    runBtn.disabled=false;
+    const [A,B]=troughs;const wa=wordsFor(A),wb=wordsFor(B);
+    const f=x=>Math.round(x);
+    let html=`<b>結果</b>（かたむきと水の量で整理する）<table><tr><th></th><th>Ⓐ ${A.c.slope}cmの台・びん${A.c.water}つ</th><th>Ⓑ ${B.c.slope}cmの台・びん${B.c.water}つ</th></tr>`;
+    html+=`<tr><th>水の流れ</th><td>${wa.speedW}</td><td>${wb.speedW}</td></tr>`;
+    html+=`<tr><th>土のけずれ方</th><td>${wa.eroW}（深さの目安 ${f(A.maxD*100)}）</td><td>${wb.eroW}（深さの目安 ${f(B.maxD*100)}）</td></tr>`;
+    html+=`<tr><th>水のようす</th><td>${wa.turbW}</td><td>${wb.turbW}</td></tr>`;
+    html+=`<tr><th>受け皿に積もった土</th><td>目安 ${f(A.delta*10)}</td><td>目安 ${f(B.delta*10)}</td></tr></table>`;
+    const c=cond();
+    if(c.A.slope!==c.B.slope&&c.A.water===c.B.water){
+      const hi=c.A.slope===10?'Ⓐ':'Ⓑ',lo=hi==='Ⓐ'?'Ⓑ':'Ⓐ';
+      html+=`<p style="margin:6px 0 0">かたむきが急な${hi}は、水の流れが速く、土が深くけずられた。ゆるやかな${lo}は、流れがゆるやかで、あまりけずられない。受け皿には、運ばれてきた土が積もった。</p>`;
+    }else if(c.A.water!==c.B.water&&c.A.slope===c.B.slope){
+      const hi=c.A.water===2?'Ⓐ':'Ⓑ',lo=hi==='Ⓐ'?'Ⓑ':'Ⓐ';
+      html+=`<p style="margin:6px 0 0">水の量が多い${hi}は、水の流れが速く、水がにごり、土がよりけずられた。少ない${lo}は、流れがゆるやかで、水がすんでいる。</p>`;
+    }else{
+      html+=`<p style="margin:6px 0 0">くらべるときは、かたむきか水の量のどちらか1つだけを変えましょう。</p>`;
+    }
+    res.innerHTML=html;res.hidden=false;wak.hidden=false;words.hidden=false;
+    st.textContent='流し終わりました。けずられたみぞ（しん食）、運ばれた土（運ぱん）、受け皿に積もった土（たい積）を見てみましょう。';
+  }
+  function updateMeters(){
+    troughs.forEach((t,i)=>{
+      const el=document.getElementById(i?'fMeterB':'fMeterA');
+      const v=t.vN?t.vAvg/t.vN:0;const load=t.loadN?t.loadSum/t.loadN:0;
+      el.innerHTML=[['流れの速さ',v/2.6],['けずれた深さ',t.maxD/1.3],['水のにごり',load/0.01],['積もった土',t.delta/10]].map(([k,x])=>`<span>${k}</span><div class="bar"><i style="width:${clamp(x,0,1)*100}%"></i></div>`).join('');
+    });
+  }
+  function draw(){
+    const ctx=fitCanvas(canvas,W,H);
+    if(!pattern)pattern=ctx.createPattern(tex,'repeat');
+    ctx.fillStyle='#f7fafd';ctx.fillRect(0,0,W,H);
+    troughs.forEach((t,ti)=>{
+      const x0=t.x;
+      // 台（かたむき）の表示
+      ctx.fillStyle='#5b6b7c';ctx.font='bold 15px sans-serif';ctx.textAlign='left';
+      const c=t.c||cond()[ti?'B':'A'];
+      ctx.fillText(`${t.name}　${c.slope===10?'高い台（10cm）':'低い台（5cm）'}・せんじょうびん${c.water}つ`,x0-20,TOP-16);
+      // 受け皿
+      ctx.fillStyle='#e9eef5';ctx.fillRect(x0-14,TOP-6,TW+28,TRAY_END-TOP+16);
+      ctx.strokeStyle='#8aa';ctx.lineWidth=2;ctx.strokeRect(x0-14,TOP-6,TW+28,TRAY_END-TOP+16);
+      // 受け皿の水
+      ctx.fillStyle='#cfe6f8';ctx.fillRect(x0-12,SOIL_END,TW+24,TRAY_END-SOIL_END+6);
+      // 土
+      ctx.fillStyle=pattern;ctx.fillRect(x0,TOP,TW,SOIL_END-TOP);
+      // みぞ
+      const n=t.nodes;
+      for(let i=0;i<N-1;i++){
+        const a=n[i],b=n[i+1];
+        const shade=clamp(a.d,0,1.4);
+        ctx.fillStyle=`rgb(${110-shade*45|0},${80-shade*35|0},${50-shade*25|0})`;
+        ctx.beginPath();ctx.moveTo(a.cx-a.w,a.y);ctx.lineTo(a.cx+a.w,a.y);ctx.lineTo(b.cx+b.w,b.y+0.5);ctx.lineTo(b.cx-b.w,b.y+0.5);ctx.closePath();ctx.fill();
+      }
+      // 曲がりの内側に積もった土（帯で描く）
+      ctx.fillStyle='#d9c08a';
+      for(const side of [-1,1]){
+        const dep=i=>Math.min(9,(side<0?n[i].depL:n[i].depR)*300);
+        if(!n.some((_,i)=>dep(i)>0.8))continue;
+        ctx.beginPath();
+        for(let i=0;i<N;i++){const q=n[i];const x=q.cx+side*q.w;i?ctx.lineTo(x,q.y):ctx.moveTo(x,q.y);}
+        for(let i=N-1;i>=0;i--){const q=n[i];ctx.lineTo(q.cx+side*(q.w+dep(i)),q.y);}
+        ctx.closePath();ctx.fill();
+      }
+      // みぞの中の水（にごり）
+      if(t.parts.length){
+        const load=t.loadN?t.loadSum/t.loadN:0;
+        ctx.strokeStyle=`rgba(${90+load*900|0},${150-load*600|0},${220-load*1200|0},.55)`;ctx.lineWidth=5;ctx.lineJoin='round';
+        ctx.beginPath();n.forEach((a,i)=>{if(a.wet){i?ctx.lineTo(a.cx,a.y):ctx.moveTo(a.cx,a.y);}});ctx.stroke();
+      }
+      // 水のつぶ
+      for(const p of t.parts){
+        const l=clamp(p.load*40,0,1);
+        ctx.fillStyle=`rgba(${80+l*110|0},${140-l*60|0},${230-l*150|0},.9)`;
+        ctx.beginPath();ctx.arc(p.x,p.y,2.2,0,6.28);ctx.fill();
+      }
+      // 受け皿に積もった土
+      if(t.delta>0){const ex=n[N-1].cx;const r=Math.min(70,4+Math.sqrt(t.delta)*12);ctx.save();ctx.beginPath();ctx.rect(x0-12,SOIL_END,TW+24,TRAY_END-SOIL_END+6);ctx.clip();const g=ctx.createRadialGradient(ex,SOIL_END+4,0,ex,SOIL_END+4,r);g.addColorStop(0,'#c9a96a');g.addColorStop(1,'#d9c08a');ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(ex,SOIL_END+6,r*1.3,r*0.7,0,0,Math.PI);ctx.fill();ctx.restore();}
+      // せんじょうびん
+      if(t.pourLeft>0){
+        for(let b=0;b<(c.water||1);b++){
+          const bx=n[0].cx+(c.water===2?(b?26:-26):0);
+          ctx.fillStyle='#dbe8f5';ctx.strokeStyle='#5c7a99';ctx.lineWidth=2;
+          ctx.beginPath();ctx.roundRect(bx-12,TOP-36,24,26,4);ctx.fill();ctx.stroke();
+          ctx.strokeStyle='rgba(90,150,220,.7)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(bx,TOP-10);ctx.lineTo(n[0].cx,TOP+4);ctx.stroke();
+        }
+      }
+      // ラベル
+      ctx.fillStyle='#5b6b7c';ctx.font='12px sans-serif';ctx.textAlign='left';
+      ctx.fillText('水でしめらせた土',x0+4,TOP+14);ctx.fillText('受け皿',x0-10,TRAY_END+2);
+      if(done){
+        ctx.font='bold 14px sans-serif';
+        const tag=(s,x,y,col)=>{const w=ctx.measureText(s).width+12;ctx.fillStyle='rgba(255,255,255,.9)';ctx.fillRect(x-6,y-13,w,20);ctx.fillStyle=col;ctx.fillText(s,x,y+2);};
+        tag('しん食（けずる）',x0+TW+4,TOP+60,'#7a3b12');tag('運ぱん（運ぶ）',x0+TW+4,TOP+200,'#1f4f8f');tag('たい積（積もる）',x0+TW+4,SOIL_END+30,'#5a3a1a');
+      }
+    });
+    ctx.fillStyle='#5b6b7c';ctx.font='12px sans-serif';ctx.textAlign='left';
+    ctx.fillText('↓ 水は上から下へ流れます（上から見た図）',12,H-10);
+  }
+  segControl(document.getElementById('fSpeed'),v=>speed=v);
+  ['fSlopeA','fWaterA','fSlopeB','fWaterB'].forEach(id=>segControl(document.getElementById(id),()=>{if(!running)reset();}));
+  document.getElementById('fPreset2').addEventListener('click',()=>{segSet(document.getElementById('fSlopeA'),5);segSet(document.getElementById('fSlopeB'),10);segSet(document.getElementById('fWaterA'),1);segSet(document.getElementById('fWaterB'),1);reset();st.textContent='かたむきだけを変えます（Ⓐ低い台・Ⓑ高い台、水はどちらもびん1つ）。「水を流す」を押しましょう。';});
+  document.getElementById('fPreset3').addEventListener('click',()=>{segSet(document.getElementById('fSlopeA'),5);segSet(document.getElementById('fSlopeB'),5);segSet(document.getElementById('fWaterA'),1);segSet(document.getElementById('fWaterB'),2);reset();st.textContent='水の量だけを変えます（台はどちらも5cm、Ⓐびん1つ・Ⓑびん2つ）。「水を流す」を押しましょう。';});
+  runBtn.addEventListener('click',run);
+  document.getElementById('fReset').addEventListener('click',reset);
+  reset();
+  return {step,draw};
+})();
+
+/* ---------- ② スポンジ実験 ---------- */
+const Sponge=(()=>{
+  const W=900,H=540;
+  const canvas=document.getElementById('spongeCanvas');
+  const JAR={x:60,y:70,w:260,h:360};
+  const SLOTS=[{n:0,label:'もとの大きさ'},{n:50,label:'50回ふった後'},{n:100,label:'100回ふった後'},{n:150,label:'150回ふった後'}];
+  const S0=58;
+  let cubes=[],count=0,shakeQueue=0,shakePhase=0,offset=0,crumbs=[],taken=[],pendingTake=false;
+  const st=document.getElementById('sStatus'),res=document.getElementById('sResult'),wak=document.getElementById('sWakatta'),words=document.getElementById('sWords');
+  const takeBtn=document.getElementById('sTake'),b10=document.getElementById('sShake10'),b50=document.getElementById('sShake50');
+  const sizeOf=n=>S0*(1-0.32*Math.min(n,150)/150);
+  const roundOf=n=>Math.pow(Math.min(n,150)/150,1.2)*0.95;
+  function reset(){
+    cubes=[];for(let i=0;i<6;i++)cubes.push({x:JAR.x+50+(i%3)*80,y:JAR.y+JAR.h-60-Math.floor(i/3)*70,rot:rand(-.2,.2),seed:Math.floor(Math.random()*1e6),vx:0,vy:0,vr:0});
+    count=0;shakeQueue=0;shakePhase=0;offset=0;crumbs=[];pendingTake=false;
+    taken=[{n:0,seed:Math.floor(Math.random()*1e6)}];
+    st.textContent='まず「もとの大きさ」のスポンジを1つとっておきました。容器をふってみましょう。';
+    res.hidden=true;wak.hidden=true;words.hidden=true;updateButtons();
+  }
+  function nextTarget(){return SLOTS.find(s=>s.n>0&&!taken.some(t=>t.n===s.n));}
+  function updateButtons(){
+    const tgt=nextTarget();
+    const canShake=shakeQueue===0&&!pendingTake&&!!tgt;
+    b10.disabled=!canShake;b50.disabled=!canShake;takeBtn.disabled=!pendingTake;
+  }
+  function shake(n){
+    const tgt=nextTarget();if(!tgt||pendingTake)return;
+    shakeQueue=Math.min(n,tgt.n-count);
+    st.textContent=`ふっています…（${count}回）`;updateButtons();
+  }
+  function take(){
+    if(!pendingTake)return;
+    const tgt=SLOTS.find(s=>s.n===count);
+    taken.push({n:count,seed:cubes[0].seed});cubes.shift();pendingTake=false;
+    const nxt=nextTarget();
+    if(nxt){st.textContent=`${count}回ふったスポンジを1つ取り出しました。さらに${nxt.n-count}回ふって（合計${nxt.n}回）、もう1つ取り出しましょう。`;}
+    else{st.textContent='150回ふったスポンジを取り出しました。4つをならべて、大きさや形をくらべましょう。';showResult();}
+    updateButtons();
+  }
+  function showResult(){
+    let html='<b>結果</b><table><tr><th>ふった回数</th><th>大きさ（もとを100とすると）</th><th>形</th></tr>';
+    SLOTS.forEach(s=>{const sz=Math.round(sizeOf(s.n)/S0*100);const r=roundOf(s.n);const shape=r<.2?'角ばっている':r<.45?'角が少しとれてきた':r<.8?'角がとれて丸みをおびている':'小さく、丸くなっている';html+=`<tr><td>${s.n===0?'もと':s.n+'回'}</td><td>${sz}</td><td>${shape}</td></tr>`;});
+    html+='</table><p style="margin:6px 0 0">ふる回数が多いほど、スポンジは小さく、丸くなった。川の石も、増水したときに運ばれながらぶつかり合って、角がけずれ、小さく丸くなっていく。ふる回数が多いことは、運ばれるきょりが長いことにあたる。</p>';
+    res.innerHTML=html;res.hidden=false;wak.hidden=false;words.hidden=false;
+  }
+  function step(){
+    // ふる動き
+    if(shakeQueue>0){
+      shakePhase+=0.55;
+      offset=Math.sin(shakePhase)*22;
+      if(shakePhase>=Math.PI*2){
+        shakePhase-=Math.PI*2;shakeQueue--;count++;
+        // 角がけずれてかけらが出る
+        for(let i=0;i<3;i++)crumbs.push({x:rand(JAR.x+20,JAR.x+JAR.w-20),y:rand(JAR.y+120,JAR.y+JAR.h-20),vy:rand(.2,.6)});
+        for(const c of cubes){c.vx=rand(-6,6);c.vy=rand(-7,2);c.vr=rand(-.5,.5);}
+        if(shakeQueue===0){
+          offset=0;
+          if(SLOTS.some(s=>s.n===count)&&!taken.some(t=>t.n===count)){pendingTake=true;st.textContent=`${count}回ふりました。スポンジを1つ取り出して、記録用の台にのせましょう。`;}
+          else st.textContent=`${count}回ふりました。`;
+          updateButtons();
+        }
+      }
+    }
+    // スポンジの動き（容器の中でころがる）
+    const sz=sizeOf(count);
+    for(const c of cubes){
+      c.vy+=0.5;c.x+=c.vx;c.y+=c.vy;c.rot+=c.vr;c.vx*=0.9;c.vr*=0.9;
+      const l=JAR.x+sz/2+6,r=JAR.x+JAR.w-sz/2-6,b=JAR.y+JAR.h-sz/2-8,t=JAR.y+sz/2+40;
+      if(c.x<l){c.x=l;c.vx*=-.5;}if(c.x>r){c.x=r;c.vx*=-.5;}
+      if(c.y>b){c.y=b;c.vy*=-.3;c.vr*=.5;}if(c.y<t){c.y=t;c.vy=0;}
+    }
+    // スポンジどうしが重ならないように少し押し合う
+    for(let i=0;i<cubes.length;i++)for(let j=i+1;j<cubes.length;j++){const a=cubes[i],b=cubes[j];const dx=b.x-a.x,dy=b.y-a.y;const d=Math.hypot(dx,dy)||1;const min=sz*0.95;if(d<min){const push=(min-d)/2;a.x-=dx/d*push;a.y-=dy/d*push;b.x+=dx/d*push;b.y+=dy/d*push;}}
+    for(const cr of crumbs){cr.y=Math.min(JAR.y+JAR.h-6-Math.random()*6,cr.y+cr.vy);}
+    if(crumbs.length>600)crumbs.splice(0,crumbs.length-600);
+  }
+  function draw(){
+    const ctx=fitCanvas(canvas,W,H);
+    ctx.fillStyle='#f7fafd';ctx.fillRect(0,0,W,H);
+    // 容器
+    ctx.save();ctx.translate(offset,0);
+    const {x,y,w,h}=JAR;
+    ctx.fillStyle='#e6f0fa';ctx.beginPath();ctx.roundRect(x,y,w,h,[6,6,26,26]);ctx.fill();
+    // 水（にごり）
+    const turb=Math.min(1,count/150);
+    ctx.save();ctx.beginPath();ctx.roundRect(x,y,w,h,[6,6,26,26]);ctx.clip();
+    ctx.fillStyle=`rgba(${120-turb*30|0},${170-turb*20|0},${110|0},${0.08+turb*0.32})`;ctx.fillRect(x,y+40,w,h-40);
+    // かけら
+    ctx.fillStyle='rgba(60,110,70,.75)';for(const cr of crumbs){ctx.fillRect(cr.x,cr.y,2,2);}
+    // スポンジ
+    const sz=sizeOf(count),rd=roundOf(count);
+    for(const c of cubes){
+      drawStone(ctx,c.x,c.y,sz,rd,c.seed,c.rot);
+      ctx.fillStyle='#4f9a5c';ctx.fill();ctx.strokeStyle='#2f6b3a';ctx.lineWidth=1.5;ctx.stroke();
+    }
+    ctx.restore();
+    // ふた・輪かく
+    ctx.fillStyle='#4a5a6a';ctx.fillRect(x-6,y-14,w+12,20);
+    ctx.strokeStyle='#5c7a99';ctx.lineWidth=3;ctx.beginPath();ctx.roundRect(x,y,w,h,[6,6,26,26]);ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,.5)';ctx.fillRect(x+10,y+30,8,h-60);
+    ctx.restore();
+    ctx.fillStyle='#1f2a37';ctx.font='bold 16px sans-serif';ctx.textAlign='left';
+    ctx.fillText(`ふった回数：${count}回`,JAR.x,JAR.y+JAR.h+36);
+    ctx.fillStyle='#5b6b7c';ctx.font='12px sans-serif';ctx.fillText('プラスチックの容器（ふたをしてふる）・水・生け花用スポンジ',JAR.x,JAR.y+JAR.h+58);
+    // 記録用の台
+    const bx=420,by=120,bw=450,bh=250;
+    ctx.fillStyle='#fff8ec';ctx.strokeStyle='#e0c89a';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(bx,by,bw,bh,10);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#7a5a2a';ctx.font='bold 15px sans-serif';ctx.fillText('記録用の台（取り出したスポンジ）',bx+12,by+26);
+    SLOTS.forEach((s,i)=>{
+      const cx=bx+60+i*110,cy=by+140;
+      ctx.fillStyle='#f1e6cf';ctx.fillRect(cx-45,cy-55,90,110);
+      const t=taken.find(q=>q.n===s.n);
+      if(t){drawStone(ctx,cx,cy-8,sizeOf(s.n),roundOf(s.n),t.seed,0);ctx.fillStyle='#4f9a5c';ctx.fill();ctx.strokeStyle='#2f6b3a';ctx.lineWidth=1.5;ctx.stroke();}
+      else{ctx.strokeStyle='#cbb58a';ctx.setLineDash([4,3]);ctx.strokeRect(cx-28,cy-36,56,56);ctx.setLineDash([]);}
+      ctx.fillStyle='#5b6b7c';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText(s.label,cx,cy+48);ctx.textAlign='left';
+    });
+    // 川の上流〜下流の石とむすびつける
+    const ry=420;
+    ctx.fillStyle='#5b6b7c';ctx.font='bold 13px sans-serif';ctx.fillText('川原の石のようす（上流 → 下流）',420,ry-6);
+    const g=ctx.createLinearGradient(420,0,870,0);g.addColorStop(0,'#bcd7ea');g.addColorStop(1,'#dcebf5');ctx.fillStyle=g;ctx.fillRect(420,ry,450,90);
+    const zones=[['上流',0,36,.1],['中流',1,24,.55],['下流',2,12,.95]];
+    zones.forEach(([lab,zi,sz,rd])=>{
+      const zx=420+zi*150;const rnd=mulberry(11+zi);
+      const cnt=zi===0?3:zi===1?6:14;
+      for(let i=0;i<cnt;i++){const px=zx+22+rnd()*105,py=ry+30+rnd()*(zi===0?26:40);drawStone(ctx,px,py,sz,rd,100+zi*50+i,rnd()*3);ctx.fillStyle=`hsl(${30+rnd()*20},12%,${48+rnd()*20}%)`;ctx.fill();ctx.strokeStyle='#5a5048';ctx.lineWidth=1;ctx.stroke();}
+      ctx.fillStyle='#1f2a37';ctx.font='bold 13px sans-serif';ctx.fillText(lab,zx+8,ry+16);
+      ctx.fillStyle='#5b6b7c';ctx.font='11px sans-serif';ctx.fillText(zi===0?'大きく、角ばっている':zi===1?'少し小さく、丸みがある':'小さく、丸い',zx+8,ry+84);
+    });
+  }
+  b10.addEventListener('click',()=>shake(10));
+  b50.addEventListener('click',()=>shake(50));
+  takeBtn.addEventListener('click',take);
+  document.getElementById('sReset').addEventListener('click',reset);
+  reset();
+  return {step,draw};
+})();
+
+/* ---------- ③ たしかめ問題 ---------- */
+(() => {
+  const qs=[
+    {q:'水が地面をけずるはたらきを何といいますか。',o:['しん食','運ぱん','たい積'],a:0,fb:'けずる＝しん食。けずった土を運ぶのが運ぱん、積もらせるのがたい積です。'},
+    {q:'けずった土や石を運ぶはたらきを何といいますか。',o:['たい積','運ぱん','しん食'],a:1,fb:'運ぶ＝運ぱん。水がにごっているのは、土が運ぱんされている証拠です。'},
+    {q:'運んできた土や石を積もらせるはたらきを何といいますか。',o:['しん食','運ぱん','たい積'],a:2,fb:'積もらせる＝たい積。流れのゆるやかなところで起こります。'},
+    {q:'土地のかたむきが大きいとき、流れる水のはたらきはどうなりますか。',o:['流れの速さがおそくなり、はたらきは小さくなる','流れの速さが速くなり、はたらきは大きくなる','流れの速さは変わらない'],a:1,fb:'かたむきが大きかったり、水の量が多かったりすると、流れの速さは速くなり、流れる水のはたらきも大きくなります。'},
+    {q:'水の量が多いときの実験の結果として正しいものはどれですか。',o:['水はすんでいて、土はあまりけずられない','水はにごっていて、土はよりけずられる','水はすんでいて、土は深くけずられる'],a:1,fb:'水の量が多いと、流れが速くなり、土がよりけずられて運ばれるので、水はにごります。'},
+    {q:'川の曲がったところで、流れが速い外側の川岸は、どのようになっていますか。',o:['土や石が積もって、川原が広がっている','けずられて、がけになっている','流れが速くても、何も変わらない'],a:1,fb:'外側は流れが速いのでしん食されてがけになり、内側は流れがゆるやかなのでたい積して川原になります。'},
+    {q:'川原の石が、下流にいくにつれて小さく丸くなっているのはなぜですか。',o:['下流の石は、はじめから小さく丸い石だから','運ばれながらぶつかり合って、角がけずれるから','水にとけて小さくなるから'],a:1,fb:'石は、川が増水したときなどに運ばれながらぶつかり合って、角がけずれ、小さく丸くなっていきます。スポンジ実験はその早回しです。'},
+  ];
+  const root=document.getElementById('quiz');
+  qs.forEach((it,i)=>{
+    const d=document.createElement('div');d.className='q';
+    d.innerHTML=`<p>問${i+1}　${it.q}</p><div class="opts"></div><div class="fb"></div>`;
+    const opts=d.querySelector('.opts'),fb=d.querySelector('.fb');
+    it.o.forEach((t,j)=>{const b=document.createElement('button');b.textContent=['ア','イ','ウ'][j]+'　'+t;
+      b.addEventListener('click',()=>{opts.querySelectorAll('button').forEach(x=>x.classList.remove('ok','ng'));
+        if(j===it.a){b.classList.add('ok');fb.innerHTML='<b style="color:var(--ok)">正解！</b> '+it.fb;}
+        else{b.classList.add('ng');fb.innerHTML='<b style="color:var(--ng)">ちがいます。</b> もう一度考えてみましょう。';}});
+      opts.appendChild(b);});
+    root.appendChild(d);
+  });
+})();
+
+/* ---------- タブと描画ループ ---------- */
+let active='flow';
+document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+  document.querySelectorAll('.tab').forEach(s=>s.classList.toggle('active',s.id==='tab-'+b.dataset.tab));
+  active=b.dataset.tab;
+}));
+function loop(){
+  if(active==='flow'){Flow.step();Flow.draw();}
+  else if(active==='sponge'){Sponge.step();Sponge.draw();}
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
