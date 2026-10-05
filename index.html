@@ -125,18 +125,20 @@
 <section id="tab-sponge" class="tab">
   <div class="panel">
     <div>
-      <div class="canvas-wrap"><canvas id="spongeCanvas" aria-label="スポンジをふる実験の画面"></canvas></div>
-      <p class="note">固い石のかわりに、生け花用スポンジ（1辺2cm〜3cmの立方体）を使います。容器にスポンジと水を入れ、ふたをしてふります。50回ふったら1つ取り出し、さらに50回（合計100回）、さらに50回（合計150回）ふって、1つずつ取り出して大きさや形をくらべます。</p>
+      <div class="canvas-wrap"><canvas id="spongeCanvas" aria-label="スポンジをふる実験の拡大画面"></canvas></div>
+      <p class="note">固い石のかわりに、生け花用スポンジ（1辺2cm〜3cmの立方体）を容器に入れ、水を入れてふたをしてふります。ここでは1つのスポンジを大きく拡大して、容器のかべやほかのスポンジにぶつかるたびに<b>角がけずれていくようす</b>を見ます。50回・100回・150回ふったときの形は、右の「記録」に残ります。</p>
     </div>
     <aside class="card">
-      <h2>容器をふって、スポンジのようすを調べる</h2>
+      <h2>容器をふって、角がけずれるようすを見る</h2>
       <div class="row">
+        <button class="btn" id="sShake1">1回ふる</button>
         <button class="btn" id="sShake10">10回ふる</button>
         <button class="btn" id="sShake50">50回ふる</button>
-        <button class="btn ok" id="sTake" disabled>1つ取り出す</button>
         <button class="btn secondary" id="sReset">やり直す</button>
       </div>
-      <div class="status" id="sStatus">まず「もとの大きさ」のスポンジを1つとっておきました。容器をふってみましょう。</div>
+      <div class="row"><span class="note">速さ：</span><div class="seg" id="sSpeed"><button data-v="slow">スロー</button><button data-v="normal" class="on">ふつう</button><button data-v="fast">速い</button></div></div>
+      <div class="status" id="sStatus">ふると、スポンジが容器のかべやほかのスポンジにぶつかって、角から小さなかけらが飛び、少しずつ丸くなります。「スロー」にするとよく見えます。</div>
+      <div class="meter" id="sMeter" style="margin-top:8px"></div>
       <div class="result" id="sResult" hidden></div>
       <div class="wakatta" id="sWakatta" hidden>
         <h3>わかったこと</h3>
@@ -418,140 +420,205 @@ const Flow=(()=>{
   return {step,draw};
 })();
 
-/* ---------- ② スポンジ実験 ---------- */
+/* ---------- ② スポンジ実験（角がけずれるようすを拡大して見る） ---------- */
 const Sponge=(()=>{
   const W=900,H=540;
   const canvas=document.getElementById('spongeCanvas');
-  const JAR={x:60,y:70,w:260,h:360};
-  const SLOTS=[{n:0,label:'もとの大きさ'},{n:50,label:'50回ふった後'},{n:100,label:'100回ふった後'},{n:150,label:'150回ふった後'}];
-  const S0=58;
-  let cubes=[],count=0,shakeQueue=0,shakePhase=0,offset=0,crumbs=[],taken=[],pendingTake=false;
-  const st=document.getElementById('sStatus'),res=document.getElementById('sResult'),wak=document.getElementById('sWakatta'),words=document.getElementById('sWords');
-  const takeBtn=document.getElementById('sTake'),b10=document.getElementById('sShake10'),b50=document.getElementById('sShake50');
-  const sizeOf=n=>S0*(1-0.32*Math.min(n,150)/150);
-  const roundOf=n=>Math.pow(Math.min(n,150)/150,1.2)*0.95;
+  const BOX={x:24,y:36,w:600,h:470};           // 容器の内側
+  const NV=96;                                  // 輪かくの点の数
+  const MARKS=[0,50,100,150];
+  const CHIP=0.045;                             // 1回ぶつかったときのけずれやすさ
+  let big,small,count=0,shakeQueue=0,phase=0,offset=0,frags=[],crumbs=[],snaps=[],flashes=[],speedMode='normal',frame=0,impacts=0;
+  const st=document.getElementById('sStatus'),res=document.getElementById('sResult'),wak=document.getElementById('sWakatta'),words=document.getElementById('sWords'),meter=document.getElementById('sMeter');
+
+  function makeSponge(size,x,y,seed){
+    const r=new Float32Array(NV);
+    for(let i=0;i<NV;i++){const th=i/NV*Math.PI*2;r[i]=size/2/Math.max(Math.abs(Math.cos(th)),Math.abs(Math.sin(th)));}
+    return {r,r0:Float32Array.from(r),x,y,a:0.2,vx:0,vy:0,w:0,size,seed};
+  }
   function reset(){
-    cubes=[];for(let i=0;i<6;i++)cubes.push({x:JAR.x+50+(i%3)*80,y:JAR.y+JAR.h-60-Math.floor(i/3)*70,rot:rand(-.2,.2),seed:Math.floor(Math.random()*1e6),vx:0,vy:0,vr:0});
-    count=0;shakeQueue=0;shakePhase=0;offset=0;crumbs=[];pendingTake=false;
-    taken=[{n:0,seed:Math.floor(Math.random()*1e6)}];
-    st.textContent='まず「もとの大きさ」のスポンジを1つとっておきました。容器をふってみましょう。';
-    res.hidden=true;wak.hidden=true;words.hidden=true;updateButtons();
+    big=makeSponge(250,BOX.x+300,BOX.y+300,1);
+    small=makeSponge(120,BOX.x+120,BOX.y+180,2);
+    count=0;shakeQueue=0;phase=0;offset=0;frags=[];crumbs=[];flashes=[];impacts=0;
+    snaps=[{n:0,r:Float32Array.from(big.r)}];
+    st.textContent='ふると、スポンジが容器のかべやほかのスポンジにぶつかって、角から小さなかけらが飛び、少しずつ丸くなります。「スロー」にするとよく見えます。';
+    res.hidden=true;wak.hidden=true;words.hidden=true;updateMeter();
   }
-  function nextTarget(){return SLOTS.find(s=>s.n>0&&!taken.some(t=>t.n===s.n));}
-  function updateButtons(){
-    const tgt=nextTarget();
-    const canShake=shakeQueue===0&&!pendingTake&&!!tgt;
-    b10.disabled=!canShake;b50.disabled=!canShake;takeBtn.disabled=!pendingTake;
+  function worldPt(sp,i){const th=i/NV*Math.PI*2+sp.a;return [sp.x+Math.cos(th)*sp.r[i],sp.y+Math.sin(th)*sp.r[i]];}
+  function idxAt(sp,worldAngle){let t=(worldAngle-sp.a)/(Math.PI*2);t=t-Math.floor(t);return Math.round(t*NV)%NV;}
+  function radiusAt(sp,worldAngle){return sp.r[idxAt(sp,worldAngle)];}
+  function stats(sp){let sum=0,mx=0,mn=1e9;for(let i=0;i<NV;i++){sum+=sp.r[i];mx=Math.max(mx,sp.r[i]);mn=Math.min(mn,sp.r[i]);}
+    const mean=sum/NV;const mean0=sp.r0.reduce((a,b)=>a+b,0)/NV;
+    const spread0=(sp.size/2)*Math.SQRT2-(sp.size/2);
+    return {size:mean/mean0,round:clamp(1-(mx-mn)/spread0,0,1)};}
+  /* ぶつかった点のまわりをけずる。角（出っぱり）ほど大きくけずれる */
+  function chip(sp,i,amount,px,py,nx,ny){
+    const K=10;
+    for(let d=-K;d<=K;d++){
+      const j=(i+d+NV)%NV;
+      let avg=0;for(let e=-14;e<=14;e++)avg+=sp.r[(j+e+NV)%NV];avg/=29;
+      const prot=Math.max(0,sp.r[j]-avg);
+      const wgt=Math.pow(Math.cos(d/(K+1)*Math.PI/2),2);
+      sp.r[j]=Math.max(sp.size*0.18,sp.r[j]-amount*wgt*(1.4+prot*0.09));
+    }
+    const n=2+Math.min(6,Math.round(amount*4));
+    for(let k=0;k<n;k++){frags.push({x:px+rand(-3,3),y:py+rand(-3,3),vx:nx*rand(1,4)+rand(-2.5,2.5),vy:ny*rand(1,4)-rand(0,3),s:rand(2,4.5),rot:rand(0,6.28),vr:rand(-.3,.3)});}
+    flashes.push({x:px,y:py,t:0,big:amount>0.9});
+    impacts++;
   }
-  function shake(n){
-    const tgt=nextTarget();if(!tgt||pendingTake)return;
-    shakeQueue=Math.min(n,tgt.n-count);
-    st.textContent=`ふっています…（${count}回）`;updateButtons();
+  function wallCollide(sp){
+    const walls=[{nx:1,ny:0,c:BOX.x},{nx:-1,ny:0,c:BOX.x+BOX.w},{nx:0,ny:-1,c:BOX.y+BOX.h},{nx:0,ny:1,c:BOX.y}];
+    for(const wl of walls){
+      let best=-1,bestPen=0;
+      for(let i=0;i<NV;i++){const p=worldPt(sp,i);const pen=wl.nx!==0?(wl.nx>0?wl.c-p[0]:p[0]-wl.c):(wl.ny>0?wl.c-p[1]:p[1]-wl.c);if(pen>bestPen){bestPen=pen;best=i;}}
+      if(best<0)continue;
+      sp.x+=wl.nx*bestPen;sp.y+=wl.ny*bestPen;
+      const p=worldPt(sp,best);
+      const rx=p[0]-sp.x,ry=p[1]-sp.y;
+      const vn=sp.vx*wl.nx+sp.vy*wl.ny;
+      if(vn<0){
+        const imp=-vn*1.35;
+        sp.vx+=wl.nx*imp;sp.vy+=wl.ny*imp;
+        sp.w+=(rx*wl.ny-ry*wl.nx)*imp*0.0006;           // 角が引っかかって回る
+        sp.w=clamp(sp.w+rand(-.02,.02),-.12,.12);
+        const speed=Math.min(24,-vn);
+        if(speed>2.5)chip(sp,best,speed*CHIP,p[0],p[1],wl.nx,wl.ny);
+      }
+      sp.vx*=0.98;
+    }
   }
-  function take(){
-    if(!pendingTake)return;
-    const tgt=SLOTS.find(s=>s.n===count);
-    taken.push({n:count,seed:cubes[0].seed});cubes.shift();pendingTake=false;
-    const nxt=nextTarget();
-    if(nxt){st.textContent=`${count}回ふったスポンジを1つ取り出しました。さらに${nxt.n-count}回ふって（合計${nxt.n}回）、もう1つ取り出しましょう。`;}
-    else{st.textContent='150回ふったスポンジを取り出しました。4つをならべて、大きさや形をくらべましょう。';showResult();}
-    updateButtons();
-  }
-  function showResult(){
-    let html='<b>結果</b><table><tr><th>ふった回数</th><th>大きさ（もとを100とすると）</th><th>形</th></tr>';
-    SLOTS.forEach(s=>{const sz=Math.round(sizeOf(s.n)/S0*100);const r=roundOf(s.n);const shape=r<.2?'角ばっている':r<.45?'角が少しとれてきた':r<.8?'角がとれて丸みをおびている':'小さく、丸くなっている';html+=`<tr><td>${s.n===0?'もと':s.n+'回'}</td><td>${sz}</td><td>${shape}</td></tr>`;});
-    html+='</table><p style="margin:6px 0 0">ふる回数が多いほど、スポンジは小さく、丸くなった。川の石も、増水したときに運ばれながらぶつかり合って、角がけずれ、小さく丸くなっていく。ふる回数が多いことは、運ばれるきょりが長いことにあたる。</p>';
-    res.innerHTML=html;res.hidden=false;wak.hidden=false;words.hidden=false;
-  }
-  function step(){
-    // ふる動き
-    if(shakeQueue>0){
-      shakePhase+=0.55;
-      offset=Math.sin(shakePhase)*22;
-      if(shakePhase>=Math.PI*2){
-        shakePhase-=Math.PI*2;shakeQueue--;count++;
-        // 角がけずれてかけらが出る
-        for(let i=0;i<3;i++)crumbs.push({x:rand(JAR.x+20,JAR.x+JAR.w-20),y:rand(JAR.y+120,JAR.y+JAR.h-20),vy:rand(.2,.6)});
-        for(const c of cubes){c.vx=rand(-6,6);c.vy=rand(-7,2);c.vr=rand(-.5,.5);}
-        if(shakeQueue===0){
-          offset=0;
-          if(SLOTS.some(s=>s.n===count)&&!taken.some(t=>t.n===count)){pendingTake=true;st.textContent=`${count}回ふりました。スポンジを1つ取り出して、記録用の台にのせましょう。`;}
-          else st.textContent=`${count}回ふりました。`;
-          updateButtons();
-        }
+  function spongeCollide(a,b){
+    const dx=b.x-a.x,dy=b.y-a.y;const dist=Math.hypot(dx,dy)||1;const th=Math.atan2(dy,dx);
+    const ia=idxAt(a,th),ib=idxAt(b,th+Math.PI);
+    const ra=a.r[ia],rb=b.r[ib];
+    if(dist<ra+rb){
+      const pen=ra+rb-dist;const nx=dx/dist,ny=dy/dist;
+      const ma=a.size*a.size,mb=b.size*b.size,tot=ma+mb;
+      a.x-=nx*pen*(mb/tot);a.y-=ny*pen*(mb/tot);b.x+=nx*pen*(ma/tot);b.y+=ny*pen*(ma/tot);
+      const rvx=b.vx-a.vx,rvy=b.vy-a.vy;const vn=rvx*nx+rvy*ny;
+      if(vn<0){
+        const j=-vn*1.3/(1/ma+1/mb);
+        a.vx-=j/ma*nx;a.vy-=j/ma*ny;b.vx+=j/mb*nx;b.vy+=j/mb*ny;
+        a.w+=rand(-.03,.03);b.w+=rand(-.03,.03);
+        const pa=worldPt(a,ia),pb=worldPt(b,ib);const speed=Math.min(24,-vn);
+        if(speed>2.5){chip(a,ia,speed*CHIP,pa[0],pa[1],-nx,-ny);chip(b,ib,speed*CHIP,pb[0],pb[1],nx,ny);}
       }
     }
-    // スポンジの動き（容器の中でころがる）
-    const sz=sizeOf(count);
-    for(const c of cubes){
-      c.vy+=0.5;c.x+=c.vx;c.y+=c.vy;c.rot+=c.vr;c.vx*=0.9;c.vr*=0.9;
-      const l=JAR.x+sz/2+6,r=JAR.x+JAR.w-sz/2-6,b=JAR.y+JAR.h-sz/2-8,t=JAR.y+sz/2+40;
-      if(c.x<l){c.x=l;c.vx*=-.5;}if(c.x>r){c.x=r;c.vx*=-.5;}
-      if(c.y>b){c.y=b;c.vy*=-.3;c.vr*=.5;}if(c.y<t){c.y=t;c.vy=0;}
+  }
+  function physics(){
+    for(const sp of [big,small]){
+      sp.vy+=0.42;sp.vx=clamp(sp.vx,-26,26);sp.vy=clamp(sp.vy,-26,26);sp.w=clamp(sp.w,-.12,.12);
+      sp.x+=sp.vx;sp.y+=sp.vy;sp.a+=sp.w;sp.vx*=0.995;sp.w*=0.985;
+      sp.x=clamp(sp.x,BOX.x+40,BOX.x+BOX.w-40);sp.y=clamp(sp.y,BOX.y+40,BOX.y+BOX.h-40);
+      // 輪かくの細かいデコボコは、こすれてならされる
+      if(frame%2===0){const r=sp.r,tmp=Float32Array.from(r);for(let i=0;i<NV;i++){r[i]=tmp[i]+0.012*((tmp[(i+NV-1)%NV]+tmp[(i+1)%NV])/2-tmp[i]);}}
+      wallCollide(sp);
     }
-    // スポンジどうしが重ならないように少し押し合う
-    for(let i=0;i<cubes.length;i++)for(let j=i+1;j<cubes.length;j++){const a=cubes[i],b=cubes[j];const dx=b.x-a.x,dy=b.y-a.y;const d=Math.hypot(dx,dy)||1;const min=sz*0.95;if(d<min){const push=(min-d)/2;a.x-=dx/d*push;a.y-=dy/d*push;b.x+=dx/d*push;b.y+=dy/d*push;}}
-    for(const cr of crumbs){cr.y=Math.min(JAR.y+JAR.h-6-Math.random()*6,cr.y+cr.vy);}
-    if(crumbs.length>600)crumbs.splice(0,crumbs.length-600);
+    spongeCollide(big,small);
+    for(let i=frags.length-1;i>=0;i--){const f=frags[i];f.vy+=0.25;f.x+=f.vx;f.y+=f.vy;f.rot+=f.vr;f.vx*=0.96;
+      if(f.y>BOX.y+BOX.h-4){crumbs.push({x:clamp(f.x,BOX.x+3,BOX.x+BOX.w-3),y:BOX.y+BOX.h-2-Math.random()*5,s:f.s*0.7,rot:f.rot});frags.splice(i,1);}
+      else if(f.x<BOX.x||f.x>BOX.x+BOX.w){f.vx*=-0.5;f.x=clamp(f.x,BOX.x+1,BOX.x+BOX.w-1);}
+    }
+    if(crumbs.length>700)crumbs.splice(0,crumbs.length-700);
+    for(let i=flashes.length-1;i>=0;i--){flashes[i].t++;if(flashes[i].t>26)flashes.splice(i,1);}
+  }
+  function shake(n){shakeQueue+=n;st.textContent=`ふっています…（${count}回）`;}
+  function step(){
+    frame++;
+    const sub=speedMode==='slow'?(frame%3===0?1:0):speedMode==='fast'?3:1;
+    for(let k=0;k<sub;k++){
+      if(shakeQueue>0){
+        const prev=phase;phase+=0.2;
+        offset=Math.sin(phase)*18;
+        // 半周期ごとに容器がゆれて、スポンジがほうり出される
+        if(Math.floor(prev/Math.PI)!==Math.floor(phase/Math.PI)){
+          const dir=Math.floor(phase/Math.PI)%2===0?1:-1;
+          for(const sp of [big,small]){sp.vx+=dir*rand(9,13);sp.vy-=rand(5,10);sp.w+=rand(-.05,.05);}
+        }
+        if(phase>=Math.PI*2){
+          phase-=Math.PI*2;shakeQueue--;count++;
+          if(MARKS.includes(count)&&!snaps.some(s=>s.n===count)){
+            snaps.push({n:count,r:Float32Array.from(big.r)});
+            if(count===150){shakeQueue=0;showResult();}
+            else st.textContent=`${count}回ふりました。この形を記録しました（教科書では、ここでスポンジを1つ取り出してならべます）。`;
+          }
+          if(shakeQueue===0){offset=0;if(count!==150&&!MARKS.includes(count))st.textContent=`${count}回ふりました。角のようすを見てみましょう。`;}
+        }
+      }
+      physics();
+    }
+    updateMeter();
+  }
+  function updateMeter(){
+    const s=stats(big);
+    meter.innerHTML=[['大きさ',s.size],['角の丸さ',s.round]].map(([k,x])=>`<span>${k}</span><div class="bar"><i style="width:${clamp(x,0,1)*100}%"></i></div>`).join('');
+  }
+  function showResult(){
+    let html='<b>結果</b>（記録した形は画面右）<table><tr><th>ふった回数</th><th>大きさ（もとを100とすると）</th><th>形</th></tr>';
+    snaps.forEach(sn=>{const tmp={r:sn.r,r0:big.r0,size:big.size};const s=stats(tmp);const shape=s.round<.3?'角ばっている':s.round<.65?'角が少しとれてきた':(s.round<.85||s.size>.87)?'角がとれて丸みをおびている':'小さく、丸くなっている';html+=`<tr><td>${sn.n===0?'もと':sn.n+'回'}</td><td>${Math.round(s.size*100)}</td><td>${shape}</td></tr>`;});
+    html+=`</table><p style="margin:6px 0 0">ぶつかった回数：${impacts}回。ぶつかるたびに角からかけらがけずれて、スポンジは小さく、丸くなった。川の石も、増水したときに運ばれながらぶつかり合って、角がけずれ、小さく丸くなっていく。ふる回数が多いことは、運ばれるきょりが長いことにあたる。</p>`;
+    res.innerHTML=html;res.hidden=false;wak.hidden=false;words.hidden=false;
+    st.textContent='150回ふりました。右の記録で、もとの形とくらべましょう。';
+  }
+  function drawSponge(ctx,sp,x,y,scale,rArr){
+    const r=rArr||sp.r;const a=rArr?0:sp.a;
+    ctx.beginPath();
+    for(let i=0;i<NV;i++){const th=i/NV*Math.PI*2+a;const px=x+Math.cos(th)*r[i]*scale,py=y+Math.sin(th)*r[i]*scale;i?ctx.lineTo(px,py):ctx.moveTo(px,py);}
+    ctx.closePath();
+    const g=ctx.createRadialGradient(x-sp.size*scale*0.2,y-sp.size*scale*0.2,sp.size*scale*0.05,x,y,sp.size*scale*0.7);
+    g.addColorStop(0,'#6fb878');g.addColorStop(1,'#3f8a4c');ctx.fillStyle=g;ctx.fill();
+    ctx.strokeStyle='#2a5f33';ctx.lineWidth=Math.max(1,2*scale);ctx.stroke();
+    // スポンジのあなのもよう
+    const rnd=mulberry(sp.seed*77+1);ctx.save();ctx.clip();ctx.fillStyle='rgba(30,70,40,.22)';
+    for(let i=0;i<40;i++){const px=x+(rnd()-.5)*sp.size*scale*0.9,py=y+(rnd()-.5)*sp.size*scale*0.9;ctx.beginPath();ctx.arc(px,py,(1+rnd()*2)*scale,0,6.28);ctx.fill();}
+    ctx.restore();
   }
   function draw(){
     const ctx=fitCanvas(canvas,W,H);
     ctx.fillStyle='#f7fafd';ctx.fillRect(0,0,W,H);
-    // 容器
+    // 容器（ゆれる）
     ctx.save();ctx.translate(offset,0);
-    const {x,y,w,h}=JAR;
-    ctx.fillStyle='#e6f0fa';ctx.beginPath();ctx.roundRect(x,y,w,h,[6,6,26,26]);ctx.fill();
-    // 水（にごり）
+    ctx.fillStyle='#e3eef9';ctx.beginPath();ctx.roundRect(BOX.x-4,BOX.y-4,BOX.w+8,BOX.h+8,[8,8,24,24]);ctx.fill();
+    ctx.save();ctx.beginPath();ctx.roundRect(BOX.x,BOX.y,BOX.w,BOX.h,[6,6,22,22]);ctx.clip();
     const turb=Math.min(1,count/150);
-    ctx.save();ctx.beginPath();ctx.roundRect(x,y,w,h,[6,6,26,26]);ctx.clip();
-    ctx.fillStyle=`rgba(${120-turb*30|0},${170-turb*20|0},${110|0},${0.08+turb*0.32})`;ctx.fillRect(x,y+40,w,h-40);
-    // かけら
-    ctx.fillStyle='rgba(60,110,70,.75)';for(const cr of crumbs){ctx.fillRect(cr.x,cr.y,2,2);}
-    // スポンジ
-    const sz=sizeOf(count),rd=roundOf(count);
-    for(const c of cubes){
-      drawStone(ctx,c.x,c.y,sz,rd,c.seed,c.rot);
-      ctx.fillStyle='#4f9a5c';ctx.fill();ctx.strokeStyle='#2f6b3a';ctx.lineWidth=1.5;ctx.stroke();
-    }
+    ctx.fillStyle=`rgba(110,160,110,${0.08+turb*0.28})`;ctx.fillRect(BOX.x,BOX.y,BOX.w,BOX.h);
+    // 底にたまったかけら
+    ctx.fillStyle='rgba(55,110,65,.8)';for(const c of crumbs){ctx.save();ctx.translate(c.x,c.y);ctx.rotate(c.rot);ctx.fillRect(-c.s/2,-c.s/2,c.s,c.s*0.8);ctx.restore();}
+    drawSponge(ctx,small,small.x,small.y,1);
+    drawSponge(ctx,big,big.x,big.y,1);
+    // 飛ぶかけら
+    ctx.fillStyle='#4f9a5c';for(const f of frags){ctx.save();ctx.translate(f.x,f.y);ctx.rotate(f.rot);ctx.fillRect(-f.s/2,-f.s/2,f.s,f.s*0.8);ctx.restore();}
+    // ぶつかった印
+    for(const fl of flashes){const k=fl.t/26;ctx.strokeStyle=`rgba(255,120,30,${1-k})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(fl.x,fl.y,8+k*30,0,6.28);ctx.stroke();
+      if(fl.big&&fl.t<20){ctx.fillStyle=`rgba(200,60,10,${1-k})`;ctx.font='bold 15px sans-serif';ctx.textAlign='center';ctx.fillText('角がけずれた！',clamp(fl.x,BOX.x+60,BOX.x+BOX.w-60),clamp(fl.y-24,BOX.y+20,BOX.y+BOX.h));ctx.textAlign='left';}}
     ctx.restore();
-    // ふた・輪かく
-    ctx.fillStyle='#4a5a6a';ctx.fillRect(x-6,y-14,w+12,20);
-    ctx.strokeStyle='#5c7a99';ctx.lineWidth=3;ctx.beginPath();ctx.roundRect(x,y,w,h,[6,6,26,26]);ctx.stroke();
-    ctx.fillStyle='rgba(255,255,255,.5)';ctx.fillRect(x+10,y+30,8,h-60);
+    ctx.fillStyle='#4a5a6a';ctx.fillRect(BOX.x-10,BOX.y-18,BOX.w+20,18);  // ふた
+    ctx.strokeStyle='#5c7a99';ctx.lineWidth=3;ctx.beginPath();ctx.roundRect(BOX.x,BOX.y,BOX.w,BOX.h,[6,6,22,22]);ctx.stroke();
     ctx.restore();
-    ctx.fillStyle='#1f2a37';ctx.font='bold 16px sans-serif';ctx.textAlign='left';
-    ctx.fillText(`ふった回数：${count}回`,JAR.x,JAR.y+JAR.h+36);
-    ctx.fillStyle='#5b6b7c';ctx.font='12px sans-serif';ctx.fillText('プラスチックの容器（ふたをしてふる）・水・生け花用スポンジ',JAR.x,JAR.y+JAR.h+58);
-    // 記録用の台
-    const bx=420,by=120,bw=450,bh=250;
-    ctx.fillStyle='#fff8ec';ctx.strokeStyle='#e0c89a';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(bx,by,bw,bh,10);ctx.fill();ctx.stroke();
-    ctx.fillStyle='#7a5a2a';ctx.font='bold 15px sans-serif';ctx.fillText('記録用の台（取り出したスポンジ）',bx+12,by+26);
-    SLOTS.forEach((s,i)=>{
-      const cx=bx+60+i*110,cy=by+140;
-      ctx.fillStyle='#f1e6cf';ctx.fillRect(cx-45,cy-55,90,110);
-      const t=taken.find(q=>q.n===s.n);
-      if(t){drawStone(ctx,cx,cy-8,sizeOf(s.n),roundOf(s.n),t.seed,0);ctx.fillStyle='#4f9a5c';ctx.fill();ctx.strokeStyle='#2f6b3a';ctx.lineWidth=1.5;ctx.stroke();}
-      else{ctx.strokeStyle='#cbb58a';ctx.setLineDash([4,3]);ctx.strokeRect(cx-28,cy-36,56,56);ctx.setLineDash([]);}
-      ctx.fillStyle='#5b6b7c';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText(s.label,cx,cy+48);ctx.textAlign='left';
-    });
-    // 川の上流〜下流の石とむすびつける
-    const ry=420;
-    ctx.fillStyle='#5b6b7c';ctx.font='bold 13px sans-serif';ctx.fillText('川原の石のようす（上流 → 下流）',420,ry-6);
-    const g=ctx.createLinearGradient(420,0,870,0);g.addColorStop(0,'#bcd7ea');g.addColorStop(1,'#dcebf5');ctx.fillStyle=g;ctx.fillRect(420,ry,450,90);
-    const zones=[['上流',0,36,.1],['中流',1,24,.55],['下流',2,12,.95]];
-    zones.forEach(([lab,zi,sz,rd])=>{
-      const zx=420+zi*150;const rnd=mulberry(11+zi);
-      const cnt=zi===0?3:zi===1?6:14;
-      for(let i=0;i<cnt;i++){const px=zx+22+rnd()*105,py=ry+30+rnd()*(zi===0?26:40);drawStone(ctx,px,py,sz,rd,100+zi*50+i,rnd()*3);ctx.fillStyle=`hsl(${30+rnd()*20},12%,${48+rnd()*20}%)`;ctx.fill();ctx.strokeStyle='#5a5048';ctx.lineWidth=1;ctx.stroke();}
-      ctx.fillStyle='#1f2a37';ctx.font='bold 13px sans-serif';ctx.fillText(lab,zx+8,ry+16);
-      ctx.fillStyle='#5b6b7c';ctx.font='11px sans-serif';ctx.fillText(zi===0?'大きく、角ばっている':zi===1?'少し小さく、丸みがある':'小さく、丸い',zx+8,ry+84);
+    // 回数
+    ctx.fillStyle='#1f2a37';ctx.font='bold 20px sans-serif';ctx.textAlign='left';ctx.fillText(`ふった回数：${count}回`,BOX.x+10,BOX.y+BOX.h+28);
+    ctx.fillStyle='#5b6b7c';ctx.font='12px sans-serif';ctx.fillText(`ぶつかった回数：${impacts}回　（大きく拡大して見ています）`,BOX.x+240,BOX.y+BOX.h+28);
+    // 右：記録
+    const gx=650,gy=40;
+    ctx.fillStyle='#fff8ec';ctx.strokeStyle='#e0c89a';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(gx,gy,230,470,10);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#7a5a2a';ctx.font='bold 14px sans-serif';ctx.fillText('記録（50回ごとの形）',gx+12,gy+24);
+    MARKS.forEach((n,i)=>{
+      const cy=gy+90+i*108,cx=gx+70;
+      ctx.fillStyle='#f1e6cf';ctx.fillRect(gx+12,cy-48,116,100);
+      const sn=snaps.find(s=>s.n===n);
+      if(sn){drawSponge(ctx,big,cx,cy,0.36,sn.r);}
+      else{ctx.strokeStyle='#cbb58a';ctx.setLineDash([4,3]);ctx.strokeRect(cx-40,cy-40,80,80);ctx.setLineDash([]);}
+      ctx.fillStyle='#1f2a37';ctx.font='bold 13px sans-serif';ctx.fillText(n===0?'もとの大きさ':`${n}回ふった後`,gx+136,cy-10);
+      if(sn){const s=stats({r:sn.r,r0:big.r0,size:big.size});ctx.fillStyle='#5b6b7c';ctx.font='12px sans-serif';ctx.fillText(`大きさ ${Math.round(s.size*100)}`,gx+136,cy+10);ctx.fillText(`丸さ ${Math.round(s.round*100)}`,gx+136,cy+28);}
     });
   }
-  b10.addEventListener('click',()=>shake(10));
-  b50.addEventListener('click',()=>shake(50));
-  takeBtn.addEventListener('click',take);
+  document.getElementById('sShake1').addEventListener('click',()=>shake(1));
+  document.getElementById('sShake10').addEventListener('click',()=>shake(10));
+  document.getElementById('sShake50').addEventListener('click',()=>shake(50));
   document.getElementById('sReset').addEventListener('click',reset);
+  document.getElementById('sSpeed').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{document.getElementById('sSpeed').querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');speedMode=b.dataset.v;}));
   reset();
+  window.__sponge={run:n=>{for(let i=0;i<n;i++)step();},stats:()=>({count,impacts,snaps:snaps.map(sn=>({n:sn.n,...stats({r:sn.r,r0:big.r0,size:big.size})})),now:stats(big)})};
   return {step,draw};
 })();
 
